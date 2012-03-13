@@ -85,7 +85,7 @@
             helper.setStep(settings);
 
             // Vorhandene
-            methods.destroy(options);
+            methods.destroy();
 
             // Handler neu an Events binden.
             $this.on('change.nfnumber', settings, handler.change);
@@ -115,7 +115,7 @@
          * "$(selector).nfnumber('destroy');".
          * @return jQuery selected Element
          */
-        destroy:function (options) {
+        destroy:function () {
             var $this = $(this);
 
             // Hiddenfields erzeugen für reele werten.
