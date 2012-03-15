@@ -1,7 +1,7 @@
 /**
  * @author Niklas Funke <niklas.funke@gmail.com>
- * @date: 13.03.12
- * @version 0.3
+ * @date: 16.03.12
+ * @version 0.4
  *
  * Copyright (c) 2012, Niklas Funke
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -31,9 +31,9 @@
         /** @var numeric Schritt bei Inkrementierung oder Dekrementierung */
         step:0,
         /** @var numeric Allgemeiner Maximalwert */
-        max:null,
+        max:Math.pow(2,50),
         /** @var numeric Allgemeiner Minimalwert */
-        min:null,
+        min:-Math.pow(2,50),
         /** @var string Dezimaltrennzeichen */
         decsign:'.',
         /** @var string Tausendertrennzeichen */
@@ -60,15 +60,25 @@
          */
         formmode:'raw',
         /**
-         * Hält einen Eventhandler, welcher ausgeführt wird, wenn sich der Wert
-         * eines Feldes ändert. Liefert der Handler einen Wert zurück, wird
-         * dieser anstelle des eigentlichen Werten verwendet.
+         * Hält einen Eventhandler, welcher ausgeführt wird, wenn der Wert
+         * eines Feldes manuell geändert wird. Liefert der Handler einen Wert
+         * zurück, wird dieser anstelle des eigentlichen Werten verwendet.
          *
          * function(value, settings){}
          *
          * @var function
          */
         change:null,
+        /**
+         * Wird gefuert, wenn der aktualisierungsprozess eines Feldes
+         * abgeschlossen wurde. Große Veränderung im DOM Baum sollten durch
+         * dieses Event angestoßen werden.
+         *
+         * function(value, settings){}
+         *
+         * @var function
+         */
+        update:null,
         /**
          * Hält einen Eventhandler, welcher ausgeführt wird, wenn sich der Wert
          * eines Feldes geändert hat.
@@ -99,7 +109,8 @@
     var variables = {
         reachedMax:false,
         reachedMin:false,
-        invalidValue:0
+        invalidValue:0,
+        keyupEvent:false
     };
 
     // Mögliche Methoden.
@@ -116,32 +127,42 @@
             var settings = $.extend({}, defaultSettings, options);
             helper.setStep(settings);
 
-            // Vorhandene
-            methods.destroy();
+            // Vorhandene Konfigurationen und Handler entfernen.
+            helper.destroy.call(this);
 
             // Handler neu an Events binden.
-            $this.on('change.nfnumber', settings, handler.change);
-            $this.on('blur.nfnumber', settings, handler.change);
-            $this.on('keydown.nfnumber', settings, handler.keydown);
-            $this.on('create.nfnumber', settings, settings.create);
+            $this.on('change.nfnumber', handler.change);
+            $this.on('keydown.nfnumber', handler.keydown);
             $this.on('destroy.nfnumber', settings, settings.destroy);
+            $this.on('keyup.nfnumber', handler.keyup);
 
             // Hiddenfields erzeugen für reele werten.
-            if (settings.formmode == 'raw') {
-                $this.each(function (i, e) {
-                    var $e = $(e);
-                    var $h = $e.clone(false).attr('type', 'hidden')
-                        .addClass('nfnumber-hidden');
-                    $e.after($h).data('nfnumber', {'hidden':$h});
-                });
-            }
+            $this.each(function (i, e) {
+                var $e = $(e), data = {hidden:null};
+
+                if (settings.formmode == 'raw') {
+                    var $h = $(document.createElement('input')).attr({
+                        type: 'hidden', name: $e.attr('name'), value: $e.val()
+                    });
+                    data.hidden = $h;
+                    $e.after($h);
+                }
+
+                data = $.extend({}, settings, $e.data(), data);
+                helper.setStep(data);
+                $e.data('nfnumber', data);
+//                 $e.data('nfformat', $.nfFormat(data));
+            });
 
             // Eingabefelder formatieren.
             if (settings.initformat) {
                 $this.trigger('change.nfnumber', true);
             }
 
-            $this.trigger('oncreate.nfnumber');
+            // Createevent
+            if (typeof settings.create == 'function') {
+                settings.create.call(this, settings);
+            }
 
             return this;
         },
@@ -151,13 +172,64 @@
          * @return jQuery selected Element
          */
         destroy:function () {
+            $(this).trigger('destroy.nfnumber');
+            helper.destroy.call(this);
+
+            return this;
+        },
+        /**
+         * Liefert oder Setzt den Wert des Eingabefeldes.
+         * @param value (optional) Wert, der gesetzt werden soll.
+         * @return string|{object} Wert oder jQuery Elementreferenz
+         */
+        value:function(value){
+            var $input = $(this);
+            var data = $input.data('nfnumber');
+
+            if (data != undefined) {
+                // NFNumber activated.
+                if (value != undefined) {
+                    if (data.formmode != 'raw') {
+                        value = helper.toFloat(value, data);
+                    }
+
+                    // Wert ändern.
+                    helper.changeValue($input, value, data);
+                    return this;
+                }
+
+                // Wert liefern
+                return data.hidden != null
+                    ? data.hidden.val()
+                    : $input.val();
+
+            } else {
+                // NFNumber deactivated
+                if (value != undefined) {
+                    // Wert ändern
+                    $input.val(value);
+                    return this;
+                }
+
+                return $input.val();
+            }
+        }
+    };
+
+    // Hilfsmethoden.
+    var helper = {
+        /**
+         * Entfernt NFNumbers von allen selektierten Elementen.
+         */
+        destroy:function(){
             var $this = $(this);
 
             // Hiddenfields erzeugen für reele werten.
             $this.each(function (i, e) {
                 var $e = $(e);
                 var data = $e.data('nfnumber');
-                if (data != undefined && data.hidden) {
+
+                if (data != undefined && data.hidden != null) {
                     var $h = data.hidden;
                     $e.attr('name', $h.attr('name')).val($h.val());
                     $e.getNumber = function() {
@@ -168,51 +240,18 @@
                 }
             });
 
-            $this.trigger('ondestroy.nfnumber');
-
             // Vorhandene Eventhandler entfernen.
             $this.off('.nfnumber', handler.change);
-
-            return this;
         },
-        /**
-         * Liefert den Wert des Eingabefeldes.
-         * @return string
-         */
-        value:function(){
-            var $e = $(this);
-            var d = $e.data('nfnumber');
-            if (d != undefined && d.hidden != undefined) {
-                return d.hidden.val();
-            } else {
-                return $(this).val();
-            }
-        }
-    };
-
-    // Hilfsmethoden.
-    var helper = {
         /**
          * Erzeugt automatisch den kleinsten Schritt anhand der übergebenen
          * Genauigkeit wenn kein Schritt definiert wurde.
-         * @param s NFNumber Einstellungen.
+         * @param data NFNumber Einstellungen.
          */
-        setStep:function (s) {
-            if (s.step == 0 && s.precision > 0) {
-                s.step = 1 / Math.pow(10, s.precision);
+        setStep:function (data) {
+            if (data.step == 0 && data.precision > 0) {
+                data.step = 1 / Math.pow(10, data.precision);
             }
-        },
-        /**
-         * Rundet den angegebenen Wert auf die angegebene Genauigkeit.
-         * @param value
-         * @param precision
-         */
-        round:function (value, precision) {
-            // Runden
-            var f = Math.pow(10, precision);
-            value = Math.round(value * f) / f;
-
-            return value;
         },
         /**
          * Einfache String Replace Implementation ohne RegExp.
@@ -225,6 +264,21 @@
             return subj.split(search).join(replace);
         },
         /**
+         * Rundet den angegebenen Wert auf die angegebene Genauigkeit.
+         * @param value
+         * @param precision
+         */
+        round:function (value, precision) {
+            // Runden
+            var f = Math.pow(10, precision);
+            var v = value * f;
+            v = Math.round(v);
+            v /= f;
+            value = Math.round(value * f) / f;
+
+            return value;
+        },
+        /**
          * Normalisiert den Wert anhand der übergebenen Einstellungen.
          * @param v float Wert
          * @param s object NFNumber Einstellungen
@@ -234,13 +288,17 @@
             variables.reachedMin = false;
 
             // Auf Schrittgröße runden und Javascript Rundungsfehler kompensieren
-            v = Math.ceil(helper.round(v / s.step, s.precision)) * s.step;
-            v = helper.round(v, s.precision);
+            var v1 = v / s.step;
+            v1 = helper.round(v1, s.precision);
+            v1 = Math.ceil(v1);
+            v = v1 * s.step;
+//            v = Math.ceil(helper.round(v / s.step, s.precision)) * s.step;
+//            v = helper.round(v, s.precision);
             var tempVar = v;
 
             // Zahl auf Minimum erhöhen oder Maximum absenken wenn erforderlich.
-            v = s.max != null ? Math.min(v, s.max) : v;
-            v = s.min != null ? Math.max(v, s.min) : v;
+            v = Math.min(v, s.max);
+            v = Math.max(v, s.min);
 
             if (tempVar < v) {
                 variables.reachedMin = true;
@@ -253,91 +311,100 @@
             return v;
         },
         /**
+         * Fügt dem String 0en an den Anfang an, wenn die Länge nicht der
+         * angegebenen entspricht.
+         * @param string
+         * @param length
+         */
+        prepandZeros:function(string, length) {
+            while (string.length < length) {
+                string = "0" + string
+            }
+            return string;
+        },
+        /**
          * Formatiert eine Zahl in einen String anhand des gegebenen Formates.
-         * @param flt Float, Double oder Integerzahl
-         * @param settings NFNumber Einstellungen
+         * @param value Float, Double oder Integerzahl
+         * @param data NFNumber Einstellungen
          * @return string
          */
-        toString:function (flt, settings) {
-            var retval = "",
-                p = settings.precision;
+        toString:function (value, data) {
+            var precision = data.precision, parts = [], part, isNegativ, string,
+                fraction, number, divider = 1000;
 
-            // Runden
-            flt = helper.round(flt, p);
-            var str = "" + flt;
+            // Bestimmen ob Zahl negativ ist, und dann positiv machen.
+            isNegativ = value < 0;
+            value = Math.abs(value);
 
-            // Komma ermittlen
-            var decIndex = str.indexOf(".");
-
-            // fehlende Nullen einfügen
-            str += (decIndex == -1 ? "." : "" )
-                + Math.pow(10, p).toString().substring(1);
-
-            // Ist die Zahl negativ und darf sie auch so dargestellt werden?
-            var neg = flt < 0;
-
-            if (neg) {
-                // Führendes "-" wegschneiden. Stört erstmal nur.
-                str = str.substring(1);
+            // Get fractional numbers
+            number = parseInt(value);
+            if (precision > 0) {
+                fraction = "" + Math.round((value - number) * Math.pow(10, precision));
+                fraction = helper.prepandZeros(fraction, precision);
             }
 
-            decIndex = str.indexOf(".");
+            // ... number greater then 0
+            while (number > 0) {
+                part = number / divider;
+                part = "" + Math.round((part - parseInt(part)) * divider);
 
-            // Nachkommastellen ermittlen
-            if (decIndex == -1) {
-                decIndex = str.length;
-            } else {
-                retval = settings.decsign + str.substr(decIndex + 1, p);
-            }
-
-            while (decIndex > 0) {
-                if (decIndex - 3 > 0) {
-                    retval = settings.seperator
-                        + str.substring(decIndex - 3, decIndex) + retval;
-                } else {
-                    retval = str.substring(0, decIndex) + retval;
+                // prepend zeros to numberpart if necessary.
+                if (number >= divider) {
+                    part = helper.prepandZeros(part, 3);
                 }
+                parts[parts.length] = part;
 
-                decIndex -= 3;
+                // reduce number by partsize
+                number = parseInt(number / divider);
             }
 
-            return settings.prefix
-                + (neg ? "-" : "") + retval
-                + settings.suffix;
+            // assemble string number.
+            if (parts.length == 0) {
+                string = "0";
+            } else {
+                string = parts.reverse().join(data.seperator);
+            }
+
+            // add fraction if precision greater then 0...
+            if (precision > 0) {
+                string += data.decsign + fraction;
+            }
+
+            return data.prefix + (isNegativ ? "-" : "") + string + data.suffix;
         },
         /**
          * Parsed einen String in eine Zahl anhand des gegebenen Formates.
-         * @param s Stringdarstellung einer Zahl
-         * @param sett NFNumber Einstellungen
+         * @param value Stringdarstellung einer Zahl
+         * @param data NFNumber Einstellungen
          * @return float
          */
-        toFloat:function (s, sett) {
+        toFloat:function (value, data) {
 
-            if (typeof s == 'string') {
-                if (sett.prefix != '') {
-                    s = helper.replace(sett.prefix, '', s);
+            if (typeof value == 'string') {
+                if (data.prefix != '') {
+                    value = helper.replace(data.prefix, '', value);
                 }
 
-                if (sett.suffix != '') {
-                    s = helper.replace(sett.suffix, '', s);
+                if (data.suffix != '') {
+                    value = helper.replace(data.suffix, '', value);
                 }
 
-                if (sett.seperator != '' && s.indexOf(sett.seperator) != -1) {
-                    s = helper.replace(sett.seperator, "", s);
+                if (data.seperator != '' && value.indexOf(data.seperator) != -1) {
+                    value = helper.replace(data.seperator, "", value);
                 }
 
-                if (sett.decsign != '.' && s.indexOf(sett.decsign) != -1) {
-                    s = helper.replace(sett.decsign, ".", s);
+                if (data.decsign != '.' && value.indexOf(data.decsign) != -1) {
+                    value = helper.replace(data.decsign, ".", value);
                 }
             } else {
-                s = "0";
+                value = "0";
             }
 
-            var flt = parseFloat(s);
+            var flt = parseFloat(value);
 
             // Float gefunden? Wenn ja, Float liefern, sonst 0
             if (flt == Number.NaN) {
-                $.error('Invalid Number: ' + s);
+                $.error('Invalid Number: ' + value);
                 return 0;
             }
 
@@ -348,32 +415,45 @@
          * werden gesetzte Events abgefeuert.
          * @param $input jQuery Referenz auf das Eingabefeld.
          * @param value Wert
-         * @param s NFNumbers Einstellungen.
+         * @param data NFNumbers Einstellungen.
+         * @return float Normalisierter und gesetzter Wert.
          */
-        changeValue:function($input, value, s) {
+        changeValue:function($input, value, data) {
 
-            // Wert normalisieren.
-            value = helper.normalize(value, s);
-
-            if (s.formmode == 'raw') {
-                $(s.nfnumber.hidden).val(value);
+            // Einstellungen aus Eingabefeld übernehmen wenn nicht angegeben.
+            if (data == undefined) {
+                data = $input.data('nfnumber');
             }
 
-            // Event vor Änderung der Daten mit der Möglichkeit des Eingriffs.
-            if (typeof s.change == 'function') {
-                var eventret = s.change.call($input, value, s);
-                if ($.isNumeric(eventret)) {
-                    value = eventret;
-                }
+            // Wert normalisieren.
+            value = helper.normalize(value, data);
+
+            if (data.formmode == 'raw') {
+                data.hidden.val(value);
             }
 
             // Daten ändern
-            $input.val(helper.toString(value, s));
+            $input.val(helper.toString(value, data));
 
-            if (variables.reachedMax && s.reachmax != null) {
-                s.reachmax.call($input, value, variables.invalidValue, s);
-            } else if (variables.reachedMin && s.reachmin != null) {
-                s.reachmin.call($input, value, variables.invalidValue, s);
+            if (variables.reachedMax && data.reachmax != null) {
+                data.reachmax.call($input, value, variables.invalidValue, data);
+            } else if (variables.reachedMin && data.reachmin != null) {
+                data.reachmin.call($input, value, variables.invalidValue, data);
+            }
+
+            return value;
+        },
+        /**
+         * Führt das Update Event aus.
+         * @param $input
+         * @param value
+         * @param data
+         */
+        fireUpdateEvent:function($input, value, data) {
+            // Event vor Änderung der Daten mit der Möglichkeit des Eingriffs.
+            if (typeof data.update == 'function') {
+//                console.log('NFNumber: fire update event');
+                data.update.call($input, value, data);
             }
         }
     };
@@ -386,22 +466,45 @@
          */
         change:function (e, init) {
             var $input = $(this), value;
+            var data = $input.data('nfnumber');
 
-            // Standarddaten überschreiben
-            var settings = $.extend({}, e.data, $input.data());
-            helper.setStep(settings);
-
-            if (init != undefined && settings.formmode == 'raw') {
+            if (init != undefined && data.formmode == 'raw') {
                 // Wert einfach übernehmen da korrekter Zahlenwert.
-                value = Math.max(parseFloat($input.val()), settings.min);
+                value = Math.max(parseFloat($input.val()), data.min);
 
             } else {
                 // Wert des Eingabefeldes aus String parsen.
-                value = helper.toFloat($input.val(), settings);
+                value = helper.toFloat($input.val(), data);
             }
 
-            helper.changeValue($input, value, settings);
+            // Event vor Änderung der Daten mit der Möglichkeit des Eingriffs.
+            if (typeof data.change == 'function') {
+                data.change.call($input, value, data);
+            }
+
+            // Wert übernehmen.
+            value = helper.changeValue($input, value, data);
+
+            if (init == undefined) {
+                helper.fireUpdateEvent($input, value, data);
+            }
+
             return false;
+        },
+        /**
+         * KeyUP Event, welches nur dann das Update Event abfeuert, wenn das
+         * Event durch den keydown Event aktiviert wurde.
+         */
+        keyup:function() {
+            if (variables.keyupEvent) {
+                var $input = $(this);
+                var data = $input.data('nfnumber');
+                var value = helper.toFloat($input.val(), data);
+
+                helper.fireUpdateEvent($input, value, data);
+                variables.keyupEvent = false;
+            }
+            return true;
         },
         /**
          * onKeydown Handler. Er verändert den Wert des Feldes anhand von
@@ -410,45 +513,39 @@
          */
         keydown:function (e) {
             var $input = $(this);
+            var data = $input.data('nfnumber');
+            var value = helper.toFloat($input.val(), data);
+            var vprev = value, retval = false, key = e.which, isShift = e.shiftKey;
 
-            // Standarddaten überschreiben
-            var d = $.extend({}, e.data, $input.data());
-            helper.setStep(d);
-
-            // Wert des Eingabefeldes parsen.
-            var value = helper.toFloat($input.val(), d);
-            var vprev = value;
-            var retval = false;
-
-            switch (e.which) {
+            switch (key) {
                 case 38: // Up
                     // Wert inkrementieren.
-                    if (e.shiftKey) {
-                        value = value + (d.shiftmulti * d.step);
+                    if (isShift) {
+                        value = value + (data.shiftmulti * data.step);
                     } else {
-                        value = value + d.step;
+                        value = value + data.step;
                     }
                     // Javascript Rundungsfehler kompensieren
-                    value = helper.round(value, d.precision);
+                    value = helper.round(value, data.precision);
                     break;
 
                 case 40: // Down
                     // Wert dekrementieren
-                    if (e.shiftKey) {
-                        value = value - (d.shiftmulti * d.step);
+                    if (isShift) {
+                        value = value - (data.shiftmulti * data.step);
                     } else {
-                        value = value - d.step;
+                        value = value - data.step;
                     }
                     // Javascript Rundungsfehler kompensieren
-                    value = helper.round(value, d.precision);
+                    value = helper.round(value, data.precision);
                     break;
 
                 case 32: // Leerzeichen
                     // Zurücksetzen auf 0
-                    if (e.shiftKey) {
-                        value = d.min != null ? d.min : 0;
+                    if (!isShift) {
+                        value = data.min != Number.MIN_VALUE ? data.min : 0;
                     } else {
-                        value = d.max != null ? d.max : 0;
+                        value = data.max != Number.MAX_VALUE ? data.max : 0;
                     }
                     break;
 
@@ -466,28 +563,34 @@
 
                 // Erlaubte Taste mit Shift und verbotener Rest.
                 default:
-                    if (!e.shiftKey) {
-                        if (e.which >= 48 && e.which <= 57) {
+                    if (!isShift) {
+                        if (key >= 48 && key <= 57) {
                             // Zahlen im Hauptfeld
                             return true;
-                        } else if (e.which >= 96 && e.which <= 105) {
+                        } else if (key >= 96 && key <= 105) {
                             // Zahlen auf Numpad.
                             return true;
-                        } else if (e.which == 110 || e.which == 188) {
+                        } else if (key == 110 || key == 188) {
                             // Komma, Komma
                             return true;
-                        } else if (e.which == 190 || e.which == 189) {
+                        } else if (key == 190 || key == 189) {
                             // Punkt und Bindestrich
                             return true;
                         }
                     }
-                    console.log(e.which);
+//                    console.log('NFNumber unknown keydown: ' + key);
                     return false;
             }
 
             // Wert darf Max nicht über- oder 0 unterschreiten.
             if (value != vprev) {
-                helper.changeValue($input, value, d);
+                // Event vor Änderung der Daten mit der Möglichkeit des Eingriffs.
+                if (typeof data.change == 'function') {
+                    data.change.call($input, value, data);
+                }
+
+                helper.changeValue($input, value, data);
+                variables.keyupEvent = true;
             }
 
             return retval;
@@ -495,7 +598,7 @@
     };
 
     // Hauptmethode
-    $.fn.nfnumber = function (method) {
+    $.fn.nfNumber = function (method) {
         // Method calling logic
         if (methods[method]) {
             return methods[ method ]

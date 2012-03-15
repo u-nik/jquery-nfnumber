@@ -38,36 +38,8 @@
         input.reached {border:1px solid red;}
     </style>
     <script src="js/jquery-1.7.1.js" type="text/javascript"></script>
-    <script src="js/misc.js" type="text/javascript"></script>
     <script src="../script/jquery.nfnumber.min.js" type="text/javascript"></script>
-    <script type="text/javascript">
-        $(function () {
-            var changeHandler = function(value) {
-                $('#lastvalue').html(this.attr('name') + ': ' + value);
-            };
-
-            var reachHandler = function(value, invalidValue, s) {
-                console.log('Reached ' + value + '. Invalid value: ' + invalidValue);
-                $(this).addClass('reached');
-                window.setTimeout(function($e) {
-                    $e.removeClass('reached');
-                }, 200, $(this));
-            };
-
-            $('button#toggle').toggle(
-                function () { // Aktivieren
-                    $('#raw input').nfnumber({decsign:',', seperator:'.',change:changeHandler,reachmax:reachHandler,reachmin:reachHandler});
-                    $('#formatted input').nfnumber({decsign:',', seperator:'.', formmode:'formatted',change:changeHandler});
-                    $(this).html('Deaktivieren');
-                },
-                function () { // Deaktivieren
-                    $('#raw input').nfnumber('destroy');
-                    $('#formatted input').nfnumber('destroy');
-                    $(this).html('Aktivieren');
-                }
-            );
-        });
-    </script>
+    <script src="js/script.js" type="text/javascript"></script>
 </head>
 <body>
 <div class="wrapper">
@@ -79,18 +51,38 @@
         <p class="teaser">Dieses Plugin ermöglicht die einfache Formatierung und Validierung von Werten in Formularfeldern, die zur Eingabe von Numerischen Werten verwendet werden.</p>
         <form method="POST">
             <fieldset id="raw"><legend>Raw</legend>
-                <p>1) <label for="num1">Standard. Keine nennenswerten Beschränkungen. Deutsches Zahlenformat</label><br>
-                <input id="num1" name="num[1]" type="text" value="10000"><button type="button" data-id="num1">Wert?</button></p>
-                <p>2) <label for="num2">Schrittgröße von 0,005, Genauigkeit von 3 und dem &euro; Suffix</label><br>
-                <input id="num2" name="num[2]" type="text" value="123456.001" data-precision="3" data-step=".005" data-suffix=" &euro;"><button type="button" data-id="num2">Wert?</button></p>
-                <p>3) <label for="num3">Schrittgröße automatisch anhand der Genauigkeit bestimmt, Multiplikator ist 10000, &yen; Prefix, Englisches Format</label><br>
-                <input id="num3" name="num[3]" type="text" data-shiftmulti="10000" data-prefix="&yen; " data-seperator="," data-decsign="." value="10000"><button type="button" data-id="num3">Wert?</button></p>
-                <p>4) <label for="num4">Bereich eingeschränkt auf -150 bis -100</label><br>
-                <input id="num4" name="num[4]" type="text" data-max="-100" data-min="-150" value="0"><button type="button" data-id="num4">Wert?</button></p>
+                <p>
+                    1) <label for="num1">Standard. Keine nennenswerten Beschränkungen. Deutsches Zahlenformat</label><br>
+                    <input id="num1" name="num[1]" type="text" value="10000">
+                    <button type="button" data-method="get" data-id="num1">Wert?</button>
+                    <button type="button" data-method="set" data-value="100" data-id="num1">Setze 100</button>
+                </p>
+                <p>
+                    2) <label for="num2">Schrittgröße von 0,005, Genauigkeit von 3 und dem &euro; Suffix</label><br>
+                    <input id="num2" name="num[2]" type="text" value="123456.001" data-precision="3" data-step=".005" data-suffix=" &euro;">
+                    <button type="button" data-method="get" data-id="num2">Wert?</button>
+                    <button type="button" data-method="set" data-value="1.001" data-id="num2">Setze 1.001</button>
+                </p>
+                <p>
+                    3) <label for="num3">Schrittgröße automatisch anhand der Genauigkeit bestimmt, Multiplikator ist 10000, &yen; Prefix, Englisches Format</label><br>
+                    <input id="num3" name="num[3]" type="text" data-shiftmulti="10000" data-prefix="&yen; " data-seperator="," data-decsign="." value="10000.50">
+                    <button type="button" data-method="get" data-id="num3">Wert?</button>
+                    <button type="button" data-method="set" data-value="1.02" data-id="num3">Setze 1.02</button>
+                </p>
+                <p>
+                    4) <label for="num4">Bereich eingeschränkt auf -150 bis -100</label><br>
+                    <input id="num4" name="num[4]" type="text" data-max="-100" data-min="-150" value="0">
+                    <button type="button" data-method="get" data-id="num4">Wert?</button>
+                    <button type="button" data-method="set" data-value="-180" data-id="num4">Setze -180.00</button>
+                </p>
             </fieldset>
             <fieldset id="formatted"><legend>Formatted</legend>
-                <p>5) <label for="num5">Standard. Keine nennenswerten Beschränkungen. Deutsches Zahlenformat</label><br>
-                <input id="num5" name="num[5]" type="text" value="1.123,45"><button type="button" data-id="num5">Wert?</button></p>
+                <p>
+                    5) <label for="num5">Standard. Keine nennenswerten Beschränkungen. Deutsches Zahlenformat</label><br>
+                    <input id="num5" name="num[5]" type="text" value="1.123,45">
+                    <button type="button" data-method="get" data-id="num5">Wert?</button>
+                    <button type="button" data-method="set" data-value="1.000,45"  data-id="num5">Setze 1.000,45</button>
+                </p>
             </fieldset>
             <div>Letzter Wert: <span id="lastvalue"></span></div>
             <button type="button" id="toggle">Aktivieren</button>
