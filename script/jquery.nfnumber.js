@@ -291,7 +291,7 @@
             var v1 = v / s.step;
             v1 = helper.round(v1, s.precision);
             v1 = Math.ceil(v1);
-            v = v1 * s.step;
+            v = helper.round(v1 * s.step, s.precision);
 //            v = Math.ceil(helper.round(v / s.step, s.precision)) * s.step;
 //            v = helper.round(v, s.precision);
             var tempVar = v;
