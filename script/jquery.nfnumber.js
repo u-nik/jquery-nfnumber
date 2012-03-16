@@ -543,9 +543,9 @@
                 case 32: // Leerzeichen
                     // Zurücksetzen auf 0
                     if (!isShift) {
-                        value = data.min != Number.MIN_VALUE ? data.min : 0;
+                        value = data.min != -Math.pow(2,50) ? data.min : 0;
                     } else {
-                        value = data.max != Number.MAX_VALUE ? data.max : 0;
+                        value = data.max != Math.pow(2,50) ? data.max : 0;
                     }
                     break;
 
